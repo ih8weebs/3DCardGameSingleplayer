@@ -1,6 +1,8 @@
 using JetBrains.Annotations;
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using UnityEditor.Experimental.GraphView;
 using UnityEngine;
@@ -29,14 +31,14 @@ public class PathFinder
             }
         }
         CalculateNodesF();
-        Debug.Log("Dima");
+        /*Debug.Log("IN PathFinder");
         for (int x = 0; x < maxX; x++)
         {
             for (int z = 0; z < maxZ; z++)
             {
                 Debug.Log("x = " + x + ", z = " + z + ", fCost = " + nodesArray[x, z].fCost + ", gCost = " + nodesArray[x, z].gCost + ", hCost = " + nodesArray[x, z].hCost);
             }
-        }
+        }*/
 
     }
 
@@ -155,7 +157,7 @@ public class PathFinder
 
             for (int i = 0; i < neighboursList.Count; i++)
             {
-                if (!closedList.Contains(neighboursList[i]) || openList.Contains(neighboursList[i]))
+                if (!closedList.Contains(neighboursList[i]) || !openList.Contains(neighboursList[i]))
                 {
                     openList.Add(neighboursList[i]);
                 }
@@ -165,6 +167,58 @@ public class PathFinder
 
         return null;
     }
+
+    public List<PathNode> FindPathDima(int startX, int startZ, int targetX, int targetZ)
+    {
+        CalculateNodesF();
+
+        PathNode startNode = nodesArray[startX, startZ];
+        PathNode endNode = nodesArray[targetX, targetZ];
+
+        List<PathNode> openList = new List<PathNode> { startNode };
+        List<PathNode> closedList = new List<PathNode>();
+
+        while (openList.Count > 0)
+        {
+            PathNode currentNode = GetLowestFCostNode(openList);
+            openList.Remove(currentNode);
+            closedList.Add(currentNode);
+
+            if (currentNode == endNode)
+            {
+                return CalculatePath(endNode);
+            }
+
+            List<PathNode> neighboursList = GetNeighbourList(currentNode);
+
+            foreach (PathNode neighbourNode in neighboursList)
+            {
+                if (!neighbourNode.isWalkable || closedList.Contains(neighbourNode))
+                {
+                    continue;
+                }
+
+                int tentativeGCost = currentNode.gCost + CalculateDistanceCost(currentNode, neighbourNode);
+
+                if (!openList.Contains(neighbourNode))
+                {
+                    openList.Add(neighbourNode);
+                }
+                else if (tentativeGCost >= neighbourNode.gCost)
+                {
+                    continue;
+                }
+
+                neighbourNode.gCost = tentativeGCost;
+                neighbourNode.hCost = CalculateDistanceCost(neighbourNode, endNode);
+                neighbourNode.fCost = neighbourNode.gCost + neighbourNode.hCost;
+                neighbourNode.cameFromeNode = currentNode;
+            }
+        }
+
+        return null;
+    }
+
 
     private List<PathNode> GetNeighbourList(PathNode currentNode)
     {
@@ -203,6 +257,13 @@ public class PathFinder
             neighbourList.Add(GetNode(currentNode.x, currentNode.z + 1));
         }
 
+        Debug.Log("Neighbour List for node ({0}, {1}):" + " " + currentNode.x + " " + currentNode.z);
+        foreach (PathNode neighbor in neighbourList)
+        {
+            Debug.Log(" - ({0}, {1}) with f-cost {2}" + " " + neighbor.x + " " + neighbor.z + " " + neighbor.fCost);
+        }
+
+
         return neighbourList;
     }
 
@@ -236,6 +297,10 @@ public class PathFinder
                 lowestFCostNode = pathNodeList[i];
             }
         }
+
+        Debug.Log("Lowest f-cost node: ({0}, {1}) with f-cost {2}" + " " + lowestFCostNode.x + " " + lowestFCostNode.z + " " + lowestFCostNode.fCost);
+
+
         return lowestFCostNode;
 
     }
@@ -342,11 +407,4 @@ public class PathFinder
         }
     }
 
-
-
-
-
-    //Vlad pisya + Vlad popa
-    //Dima Latkin = kruto 
-    // Privet Nikita :D
 }

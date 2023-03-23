@@ -1,8 +1,10 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using System.Runtime.Serialization;
 
 [CreateAssetMenu(fileName = "New Tile", menuName = "Tile", order = 0)]
+[DataContract]
 public class Tile : ScriptableObject
 {
 
