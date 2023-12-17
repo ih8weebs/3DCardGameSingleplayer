@@ -1,410 +1,204 @@
-using JetBrains.Annotations;
-using System;
-using System.Collections;
 using System.Collections.Generic;
-using System.Linq;
-using System.Runtime.CompilerServices;
-using UnityEditor.Experimental.GraphView;
+using System.Net.NetworkInformation;
 using UnityEngine;
-using UnityEngine.Animations;
 
 public class PathFinder
 {
-    private PathNode[,] nodesArray;
-    private readonly int maxX;
-    private readonly int maxZ;
     private const int STRAIGHT_MOVE_COST = 10;
     private const int DIAGONAL_MOVE_COST = 14;
+    private static Node[,] generatedNodesArray;
 
-
-    public PathFinder(Tile[,] generatedTiles, int maxX, int maxZ)
+    private class Node
     {
-        this.maxX = maxX;
-        this.maxZ = maxZ;
-        nodesArray = new PathNode[maxX, maxZ];
+        public Vector3 position;
+        public List<Node> neighbors;
+        public float gCost;
+        public float hCost;
+        public float FCost => gCost + hCost;
+        public Node parent;
+        public NodeType nodeType;
 
-        for (int x = 0; x < maxX; x++)
+        public Node(Vector3 pos)
         {
-            for (int z = 0; z < maxZ; z++)
-            {
-                nodesArray[x, z] = new PathNode(x, z, generatedTiles[x, z].costMultiplier, isWalkable: generatedTiles[x, z].isWalkable);
-            }
+            position = pos;
+            neighbors = new List<Node>();
+            gCost = 0f;
+            hCost = 0f;
+            parent = null;
         }
-        CalculateNodesF();
-        /*Debug.Log("IN PathFinder");
-        for (int x = 0; x < maxX; x++)
-        {
-            for (int z = 0; z < maxZ; z++)
-            {
-                Debug.Log("x = " + x + ", z = " + z + ", fCost = " + nodesArray[x, z].fCost + ", gCost = " + nodesArray[x, z].gCost + ", hCost = " + nodesArray[x, z].hCost);
-            }
-        }*/
-
     }
 
-    public List<PathNode> FindPathOld(int startX, int startZ, int targetX, int targetZ)
+    public enum NodeType
     {
-        PathNode startNode = nodesArray[startX, startZ];
-        PathNode endNode = nodesArray[targetX, targetZ];
+        Grass,
+        Lava
+    }
 
-        List<PathNode> openList = new List<PathNode> { startNode };
-        List<PathNode> ClosedList = new List<PathNode>();
+    public static List<Vector3> FindPath(int startI,int startJ, int targetI, int targetJ, Tile[,] modelArray)
+    {
+        int gridX = modelArray.GetLength(0);
+        int gridZ = modelArray.GetLength(1);
+        generatedNodesArray = new Node[gridX, gridZ];
 
+        AssignNodes(modelArray);
+        Node startNode = GetNode(startI, startJ);
+        Node targetNode = GetNode(targetI, targetJ);
 
+        List<Node> openList = new List<Node>();
+        HashSet<Node> closedSet = new HashSet<Node>();
 
-        for (int x = 0; x < targetX + 1; x++)
-        {
-            for (int z = 0; z < targetZ + 1; z++)
-            {
-                PathNode pathnode = nodesArray[x, z];
-                pathnode.gCost = int.MaxValue;
-                pathnode.CalculateFCost();
-                pathnode.cameFromeNode = null;
-            }
-        }
-
-        startNode.gCost = 0;
-        startNode.hCost = CalculateDistanceCost(startNode, endNode);
-        startNode.CalculateFCost();
+        openList.Add(startNode);
 
         while (openList.Count > 0)
         {
-            PathNode currentNode = GetLowestFCostNode(openList);
-            if (currentNode == endNode)
+            Node currentNode = openList[0];
+
+            currentNode.hCost = CalculateHeuristicCost(currentNode); //error was here
+
+            for (int i = 0; i < openList.Count; i++)
             {
-                return CalculatePath(endNode);
+
+                if (openList[i].FCost < currentNode.FCost || openList[i].FCost == currentNode.FCost && openList[i].hCost < currentNode.hCost)
+                {
+                    currentNode = openList[i];
+                }
             }
 
             openList.Remove(currentNode);
-            ClosedList.Add(currentNode);
+            closedSet.Add(currentNode);
 
-            foreach (PathNode neighbourNode in GetNeighbourList(currentNode))
+            if (currentNode == targetNode)
             {
-                if (ClosedList.Contains(neighbourNode)) continue;
-                if (!neighbourNode.isWalkable)
+                return RetracePath(startNode, targetNode);
+            }
+
+            foreach (Node neighbour in currentNode.neighbors)
+            {
+                if (closedSet.Contains(neighbour))
                 {
-                    ClosedList.Add(neighbourNode);
                     continue;
                 }
 
-                int tentativeGCost = currentNode.gCost + CalculateDistanceCost(currentNode, neighbourNode);
-                if (tentativeGCost < neighbourNode.gCost)
-                {
-                    neighbourNode.cameFromeNode = currentNode;
-                    neighbourNode.gCost = tentativeGCost;
-                    neighbourNode.hCost = CalculateDistanceCost(neighbourNode, endNode);
-                    neighbourNode.CalculateFCost();
+                neighbour.gCost = currentNode.gCost + CalculateDistance(currentNode, neighbour);
 
-                    if (!openList.Contains(neighbourNode))
+                bool isDiagonal = false;
+                if(System.Math.Abs(currentNode.position.x - neighbour.position.x) == System.Math.Abs(currentNode.position.z - neighbour.position.z))
+                {
+                    isDiagonal = true;
+                }
+
+                float hCost = CalculateHeuristicCost(neighbour);
+
+                float newMovementCostToNeighbor = currentNode.gCost + Vector3.Distance(currentNode.position, neighbour.position);
+
+                if (newMovementCostToNeighbor < neighbour.gCost || !openList.Contains(neighbour))
+                {
+                    neighbour.gCost = newMovementCostToNeighbor;
+                    neighbour.hCost = hCost;
+                    neighbour.parent = currentNode;
+
+                    if (!openList.Contains(neighbour))
                     {
-                        openList.Add(neighbourNode);
+                        openList.Add(neighbour);
                     }
                 }
             }
         }
 
+        // Path not found
         return null;
     }
 
-
-    private PathNode GetLowestFNode(List<PathNode> list)
+    private static void AssignNodes(Tile[,] tiles)
     {
-        if(list == null || list.Count == 0)
-        {
-            return null;
-        }
+        int gridX = tiles.GetLength(0);
+        int gridZ = tiles.GetLength(1);
 
-        PathNode curNode = list[0];
+       
 
-        for(int i = 1; i < list.Count; i++)
+        for (int i = 0; i < gridX; i++)
         {
-            if(curNode.fCost > list[i].fCost)
+            for (int j = 0; j < gridZ; j++)
             {
-                curNode = list[i];
+                Tile tile = tiles[i, j];
+
+                Node node = new Node(tile.position); // Assign position from the Tile to the Node
+
+                // Assign other properties to the node if needed
+                node.nodeType = (NodeType)GetTileType(tile); 
+
+                generatedNodesArray[i, j] = node;
             }
         }
 
-        return curNode;
+        // Assign neighbors to each node based on the adjacent tiles
+        for (int i = 0; i < gridX; i++)
+        {
+            for (int j = 0; j < gridZ; j++)
+            {
+                Node currentNode = generatedNodesArray[i, j];
+
+                // Add the neighboring nodes
+                if (i > 0)
+                    currentNode.neighbors.Add(generatedNodesArray[i - 1, j]); // Left neighbor
+                if (i < gridX - 1)
+                    currentNode.neighbors.Add(generatedNodesArray[i + 1, j]); // Right neighbor
+                if (j > 0)
+                    currentNode.neighbors.Add(generatedNodesArray[i, j - 1]); // Bottom neighbor
+                if (j < gridZ - 1)
+                    currentNode.neighbors.Add(generatedNodesArray[i, j + 1]); // Top neighbor
+            }
+        }
+    }
+    private static Node GetNode(int i, int j)
+    {
+        return generatedNodesArray[i, j];
     }
 
-    public List<PathNode> FindPath(int startX, int startZ, int targetX, int targetZ)
+    private static List<Vector3> RetracePath(Node startNode, Node endNode)
     {
-        CalculateNodesF();
+        List<Vector3> path = new List<Vector3>();
+        Node currentNode = endNode;
 
-        PathNode startNode = nodesArray[startX, startZ];
-        PathNode endNode = nodesArray[targetX, targetZ];
-
-        List<PathNode> openList = new List<PathNode> { startNode };
-        List<PathNode> closedList = new List<PathNode>();
-
-
-        List<PathNode> path = new List<PathNode>();
-
-
-        while (true)
+        while (currentNode != startNode)
         {
-            PathNode curNode = GetLowestFCostNode(openList);
-            openList.Remove(curNode);
-            closedList.Add(curNode);
-
-            //curNode.x == endNode.x & curNode.z == endNode.z
-            if (curNode == endNode)
-            {
-                return path;
-            }
-
-            List<PathNode> neighboursList = GetNeighbourList(curNode);
-
-            for (int i = 0; i < neighboursList.Count; i++)
-            {
-                if (!closedList.Contains(neighboursList[i]) || !openList.Contains(neighboursList[i]))
-                {
-                    openList.Add(neighboursList[i]);
-                }
-            }
-
+            path.Add(currentNode.position);
+            currentNode = currentNode.parent;
         }
 
-        return null;
-    }
-
-    public List<PathNode> FindPathDima(int startX, int startZ, int targetX, int targetZ)
-    {
-        CalculateNodesF();
-
-        PathNode startNode = nodesArray[startX, startZ];
-        PathNode endNode = nodesArray[targetX, targetZ];
-
-        List<PathNode> openList = new List<PathNode> { startNode };
-        List<PathNode> closedList = new List<PathNode>();
-
-        while (openList.Count > 0)
-        {
-            PathNode currentNode = GetLowestFCostNode(openList);
-            openList.Remove(currentNode);
-            closedList.Add(currentNode);
-
-            if (currentNode == endNode)
-            {
-                return CalculatePath(endNode);
-            }
-
-            List<PathNode> neighboursList = GetNeighbourList(currentNode);
-
-            foreach (PathNode neighbourNode in neighboursList)
-            {
-                if (!neighbourNode.isWalkable || closedList.Contains(neighbourNode))
-                {
-                    continue;
-                }
-
-                int tentativeGCost = currentNode.gCost + CalculateDistanceCost(currentNode, neighbourNode);
-
-                if (!openList.Contains(neighbourNode))
-                {
-                    openList.Add(neighbourNode);
-                }
-                else if (tentativeGCost >= neighbourNode.gCost)
-                {
-                    continue;
-                }
-
-                neighbourNode.gCost = tentativeGCost;
-                neighbourNode.hCost = CalculateDistanceCost(neighbourNode, endNode);
-                neighbourNode.fCost = neighbourNode.gCost + neighbourNode.hCost;
-                neighbourNode.cameFromeNode = currentNode;
-            }
-        }
-
-        return null;
-    }
-
-
-    private List<PathNode> GetNeighbourList(PathNode currentNode)
-    {
-        List<PathNode> neighbourList = new List<PathNode>();
-
-        if (currentNode.x - 1 >= 0)
-        {
-            neighbourList.Add(GetNode(currentNode.x - 1, currentNode.z));
-            if (currentNode.z - 1 >= 0)
-            {
-                neighbourList.Add(GetNode(currentNode.x - 1, currentNode.z - 1));
-            }
-            if (currentNode.z + 1 < maxZ)
-            {
-                neighbourList.Add(GetNode(currentNode.x - 1, currentNode.z + 1));
-            }
-        }
-        if (currentNode.x + 1 < maxX)
-        {
-            neighbourList.Add(GetNode(currentNode.x + 1, currentNode.z));
-            if (currentNode.z - 1 >= 0)
-            {
-                neighbourList.Add(GetNode(currentNode.x + 1, currentNode.z - 1));
-            }
-            if (currentNode.z + 1 < maxZ)
-            {
-                neighbourList.Add(GetNode(currentNode.x + 1, currentNode.z + 1));
-            }
-        }
-        if (currentNode.z - 1 >= 0)
-        {
-            neighbourList.Add(GetNode(currentNode.x, currentNode.z - 1));
-        }
-        if (currentNode.z + 1 < maxZ)
-        {
-            neighbourList.Add(GetNode(currentNode.x, currentNode.z + 1));
-        }
-
-        Debug.Log("Neighbour List for node ({0}, {1}):" + " " + currentNode.x + " " + currentNode.z);
-        foreach (PathNode neighbor in neighbourList)
-        {
-            Debug.Log(" - ({0}, {1}) with f-cost {2}" + " " + neighbor.x + " " + neighbor.z + " " + neighbor.fCost);
-        }
-
-
-        return neighbourList;
-    }
-
-    private PathNode GetNode(int x, int z)
-    {
-        return nodesArray[x, z];
-    }
-
-    private List<PathNode> CalculatePath(PathNode endNode)
-    {
-        List<PathNode> path = new List<PathNode>();
-        path.Add(endNode);
-        PathNode currentNode = endNode;
-        while (currentNode.cameFromeNode != null)
-        {
-            path.Add(currentNode.cameFromeNode);
-            currentNode = currentNode.cameFromeNode;
-        }
         path.Reverse();
         return path;
-
     }
 
-    private PathNode GetLowestFCostNode(List<PathNode> pathNodeList)
+    private static float CalculateHeuristicCost(Node node)
     {
-        PathNode lowestFCostNode = pathNodeList[0];
-        for (int i = 1; i < pathNodeList.Count; i++)
+        int moveCost = 10; // the value of the tile itself, does not depends upon path
+
+        // Assign different heuristic costs based on the node type
+        switch (node.nodeType)
         {
-            if (pathNodeList[i].fCost < lowestFCostNode.fCost)
-            {
-                lowestFCostNode = pathNodeList[i];
-            }
+            case NodeType.Grass:
+                return moveCost * 1;
+
+            case NodeType.Lava:
+                return moveCost * 3;
+
+            default:
+                return moveCost;
+
         }
-
-        Debug.Log("Lowest f-cost node: ({0}, {1}) with f-cost {2}" + " " + lowestFCostNode.x + " " + lowestFCostNode.z + " " + lowestFCostNode.fCost);
-
-
-        return lowestFCostNode;
-
     }
-    private int CalculateDistanceCost(PathNode a, PathNode b)
+
+    public static Tile.TileType GetTileType(Tile tile) 
+    { 
+        return tile.tileType;
+    }
+
+    private static float CalculateDistance(Node nodeA, Node nodeB)
     {
-        int xDistance = Mathf.Abs(a.x - b.x);
-        int zDistance = Mathf.Abs(a.z - b.z);
-        int remaining = Mathf.Abs(xDistance - zDistance);
-
-        return DIAGONAL_MOVE_COST * Mathf.Min(xDistance, zDistance) + STRAIGHT_MOVE_COST * remaining;
-    }
-    void CalculateNodesF()
-    {
-        for (int x = 0; x < maxX; x++)
-        {
-            for (int z = 0; z < maxZ; z++)
-            {
-                CalculateG(nodesArray[x, z], nodesArray[0, 0]);
-                CalculateH(nodesArray[x, z], nodesArray[maxX - 1, maxZ - 1]);
-                nodesArray[x, z].CalculateFCost();
-            }
-        }
+        return Vector3.Distance(nodeA.position, nodeB.position);
     }
 
-    void CalculateG(PathNode node, PathNode startNode)
-    {
-        if (node.x == nodesArray[0, 0].x & node.z == nodesArray[0, 0].z)
-        {
-            node.gCost = 0;
-            node.hCost = 0;
-            return;
-        }
-
-        if (node.x == nodesArray[maxX - 1, maxZ - 1].x & node.z == nodesArray[maxX - 1, maxZ - 1].z)
-        {
-            node.gCost = 0;
-            node.hCost = 0;
-            return;
-        }
-        int tempX = node.x;
-        int tempZ = node.z;
-        while (tempX != startNode.x || tempZ != startNode.z)
-        {
-            if (tempX > startNode.x)
-            {
-                if (tempZ > startNode.z)
-                {
-                    tempX -= 1;
-                    tempZ -= 1;
-                    node.gCost += DIAGONAL_MOVE_COST * nodesArray[tempX, tempZ].costMultiplier;
-                }
-                else
-                {
-                    tempX -= 1;
-                    node.gCost += STRAIGHT_MOVE_COST * nodesArray[tempX, tempZ].costMultiplier;
-                }
-            }
-            else if (tempZ > startNode.z)
-            {
-                tempZ -= 1;
-                node.gCost += STRAIGHT_MOVE_COST * nodesArray[tempX, tempZ].costMultiplier;
-            }
-        }
-    }
-
-    void CalculateH(PathNode node, PathNode finishNode)
-    {
-        if (node.x == nodesArray[0, 0].x & node.z == nodesArray[0, 0].z)
-        {
-            node.gCost = 0;
-            node.hCost = 0;
-            return;
-        }
-
-        if (node.x == nodesArray[maxX - 1, maxZ - 1].x & node.z == nodesArray[maxX - 1, maxZ - 1].z)
-        {
-            node.gCost = 0;
-            node.hCost = 0;
-            return;
-        }
-        int tempX = node.x;
-        int tempZ = node.z;
-        while (tempX != finishNode.x || tempZ != finishNode.z)
-        {
-            if (tempX < finishNode.x)
-            {
-                if (tempZ < finishNode.z)
-                {
-                    tempX += 1;
-                    tempZ += 1;
-                    node.hCost += DIAGONAL_MOVE_COST * nodesArray[tempX, tempZ].costMultiplier;
-                }
-                else
-                {
-                    tempX += 1;
-                    node.hCost += STRAIGHT_MOVE_COST * nodesArray[tempX, tempZ].costMultiplier;
-                }
-            }
-            else if (tempZ < finishNode.z)
-            {
-                tempZ += 1;
-                node.hCost += STRAIGHT_MOVE_COST * nodesArray[tempX, tempZ].costMultiplier;
-            }
-        }
-    }
 
 }
+

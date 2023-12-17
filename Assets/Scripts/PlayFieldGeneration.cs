@@ -1,5 +1,7 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Threading;
 using UnityEditor;
@@ -28,25 +30,20 @@ public class PlayFieldGeneration : MonoBehaviour
     bool startTileExists = false;
     bool bossTileExists = false;
 
-    enum TileType : int
-    {
-        Grass = 1,
-        Lava
-    }
-
     void Start()
     {
         tileOffset += tileLength;
 
-        Debug.Log("tiles prefab are:");
-        Debug.Log("0, grass" + tiles[0]);
-        Debug.Log("1, lava" + tiles[1]);
+        UnityEngine.Debug.Log("tiles prefab are:");
+        UnityEngine.Debug.Log("0, grass" + tiles[0]);
+        UnityEngine.Debug.Log("1, lava" + tiles[1]);
 
 
         CreateModelOfPlayfield();
-        ShowGeneratedTilesArray();
+        //ShowGeneratedTilesArray();
         //GenerateGrid();
         CreatePathInModel();
+        ClearMemory();
     }
 
     void GenerateGrid()
@@ -83,120 +80,51 @@ public class PlayFieldGeneration : MonoBehaviour
 
     }
 
-    private void OldCreateModelOfPlayfield()
-    {
-        int[,] modelArray = new int[gridX, gridZ];
-
-        GeneratedTilesArray = new Tile[gridX, gridZ];
-
-        modelArray[0, 0] = TileType.Grass.GetHashCode();
-        modelArray[gridX - 1, gridZ - 1] = TileType.Grass.GetHashCode();
-
-        // 0 = grass
-        // 1 = lava
-
-        Tile tile = new Tile();
-
-        for (int i = 0; i < gridX; i++)
-        {
-            for (int j = 0; j < gridZ; j++)
-            {
-                if (modelArray[i, j] != (int)TileType.Grass)
-                {
-                    int randomInt = Random.Range((int)TileType.Grass, tiles.Length + (int)TileType.Grass);
-                    TileType randomTile = (TileType)randomInt;
-
-                    switch (randomTile)
-                    {
-                        case TileType.Grass:
-                            {
-                                modelArray[randomInt, j] = TileType.Grass.GetHashCode();
-                                tile = grassTile;
-                                tile.tileName = "Grass";
-                                tile.costMultiplier = 1;
-                                tile.tilePrefab = tiles[0];
-
-                                break;
-                            }
-                        case TileType.Lava:
-                            {
-                                modelArray[randomInt, j] = TileType.Lava.GetHashCode();
-                                tile = lavaTile;
-                                tile.tileName = "Lava";
-                                tile.costMultiplier = 10;
-                                tile.tilePrefab = tiles[1];
-                                break;
-                            }
-                        default:
-                            break;
-                    }
-                }
-                else if (!startTileExists && i == 0 && j == 0)
-                {
-                    tile = grassTile;
-                    tile.tileName = "Start";
-                    tile.costMultiplier = 1;
-                    startTileExists = true;
-                }
-                else if (!bossTileExists && i == gridX - 1 && j == gridZ - 1)
-                {
-                    tile = grassTile;
-                    tile.tileName = "Boss (End)";
-                    tile.costMultiplier = 1;
-                    bossTileExists = true;
-                }
-
-                GeneratedTilesArray.SetValue(tile, i, j);
-
-            }
-        }
-
-
-
-    }
-
     private void CreateModelOfPlayfield()
     {
         int[,] modelArray = new int[gridX, gridZ];
 
         GeneratedTilesArray = new Tile[gridX, gridZ];
 
-        modelArray[0, 0] = TileType.Grass.GetHashCode();
-        modelArray[gridX - 1, gridZ - 1] = TileType.Grass.GetHashCode();
-
-        // 0 = grass
-        // 1 = lava
+        modelArray[0, 0] = Tile.TileType.Grass.GetHashCode();
+        modelArray[gridX - 1, gridZ - 1] = Tile.TileType.Grass.GetHashCode();
 
         for (int i = 0; i < gridX; i++)
         {
             for (int j = 0; j < gridZ; j++)
             {
-                if (modelArray[i, j] != (int)TileType.Grass)
+                if (modelArray[i, j] != (int)Tile.TileType.Grass)
                 {
-                    int randomInt = Random.Range((int)TileType.Grass, (int)TileType.Lava + 1);
-                    TileType randomTile = (TileType)randomInt;
+                    int randomInt = UnityEngine.Random.Range((int)Tile.TileType.Grass, (int)Tile.TileType.Lava + 1);
+                    Tile.TileType randomTile = (Tile.TileType)randomInt;
 
                     switch (randomTile)
                     {
-                        case TileType.Grass:
+                        case Tile.TileType.Grass:
                             {
-                                modelArray[i, j] = TileType.Grass.GetHashCode();
+                                modelArray[i, j] = Tile.TileType.Grass.GetHashCode();
                                 Tile tile = ScriptableObject.CreateInstance<Tile>();
                                 tile.tileName = "Grass";
                                 tile.costMultiplier = 1;
+                                tile.isGrass = true;
                                 tile.tilePrefab = tiles[0];
-                                Debug.Log("Tile prefab: " + tile.tilePrefab);
+                                tile.tileType = randomTile;
+                                tile.position = new Vector3(i * tileOffset, 0, j * tileOffset) + gridOrigin;
+                                //Debug.Log("Tile prefab: " + tile.tilePrefab);
                                 GeneratedTilesArray.SetValue(tile, i, j);
                                 break;
                             }
-                        case TileType.Lava:
+                        case Tile.TileType.Lava:
                             {
-                                modelArray[i, j] = TileType.Lava.GetHashCode();
+                                modelArray[i, j] = Tile.TileType.Lava.GetHashCode();
                                 Tile tile = ScriptableObject.CreateInstance<Tile>();
                                 tile.tileName = "Lava";
+                                tile.isGrass = false;
                                 tile.costMultiplier = 10;
+                                tile.tileType = randomTile;
+                                tile.position = new Vector3(i * tileOffset, 0, j * tileOffset) + gridOrigin;
                                 tile.tilePrefab = tiles[1];
-                                Debug.Log("Tile prefab: " + tile.tilePrefab);
+                                //Debug.Log("Tile prefab: " + tile.tilePrefab);
                                 GeneratedTilesArray.SetValue(tile, i, j);
                                 break;
                             }
@@ -209,6 +137,9 @@ public class PlayFieldGeneration : MonoBehaviour
                     Tile tile = ScriptableObject.CreateInstance<Tile>();
                     tile.tileName = "Start";
                     tile.costMultiplier = 1;
+                    tile.isGrass = true;
+                    tile.tileType = Tile.TileType.Grass;
+                    tile.position = new Vector3(i * tileOffset, 0, j * tileOffset) + gridOrigin;
                     GeneratedTilesArray.SetValue(tile, i, j);
                     startTileExists = true;
                 }
@@ -217,9 +148,15 @@ public class PlayFieldGeneration : MonoBehaviour
                     Tile tile = ScriptableObject.CreateInstance<Tile>();
                     tile.tileName = "Boss (End)";
                     tile.costMultiplier = 1;
+                    tile.isGrass = true;
+                    tile.tileType = Tile.TileType.Grass;
+                    tile.position = new Vector3(i * tileOffset, 0, j * tileOffset) + gridOrigin;
                     GeneratedTilesArray.SetValue(tile, i, j);
                     bossTileExists = true;
                 }
+
+
+
             }
         }
     }
@@ -232,84 +169,50 @@ public class PlayFieldGeneration : MonoBehaviour
         {
             for (int j = 0; j < gridZ; j++)
             {
-                Debug.Log(GeneratedTilesArray[i, j].tileName + " " + i + " " + j);
+                UnityEngine.Debug.Log(GeneratedTilesArray[i, j].tileName + " " + i + " " + j);
             }
         }
     }
 
-    void OldCreatePathInModel()
+    private void ShowListV3(List<Vector3> list)
     {
-        PathFinder pathFinder = new PathFinder(GeneratedTilesArray, gridX, gridZ);
+        int i = 0;
 
-        List<PathNode> path;
+        UnityEngine.Debug.Log("Path is: ");
 
-        path = pathFinder.FindPath(0, 0, 9, 9);
-
-        if (path != null)
+        foreach (var item in list)
         {
-            Debug.Log("Here is the path: ");
-            Debug.Log("Here is the path: ");
-            Debug.Log("Here is the path: ");
-
-            for (int i = 0; i < path.Count; i++)
-            {
-
-                Debug.Log("X: " + path[i].x + " Z: " + path[i].z);
-
-                if (path[i].costMultiplier == 10)
-                {
-                    path[i].costMultiplier = 1;
-                }
-            }
-
-            int pathCounter = 0;
-            int pathX; 
-            int pathZ;
-
-            for (int x = 0; x < gridX; x++)
-            {
-                for (int z = 0; z < gridZ; z++)
-                {
-                    if (pathCounter < path.Count)
-                    {
-                        
-                        pathX = path[pathCounter].x; 
-                        pathZ = path[pathCounter].z;
-
-                        if (x == pathX && z == pathZ)
-                        {
-                            GeneratedTilesArray[x, z] = grassTile;
-                            GeneratedTilesArray[x, z].name = "ChangedTile";
-                            GeneratedTilesArray[x, z].costMultiplier = path[pathCounter].costMultiplier;
-                            GeneratedTilesArray[x, z].isWalkable = path[pathCounter].isWalkable;
-                            if (pathCounter < path.Count) { pathCounter++; }
-                        }
-                    }
-                }
-            }
-
-            Debug.Log("end of path: ");
-            Debug.Log("end of path: ");
-            Debug.Log("end of path: ");
-        }
-        else
-        {
-            Debug.Log("Path is null!!!");
+            UnityEngine.Debug.Log("element "+ i + ": (" + list[i].x + "; " + list[i].y + "; " + list[i].z + ";) ");
+            i++;
         }
 
-        SpawnTiles();
-
+        UnityEngine.Debug.Log("Path ended.");
     }
 
     void CreatePathInModel()
     {
-        PathFinder pathFinder = new PathFinder(GeneratedTilesArray, gridX, gridZ);
+        Vector3 startTilePosition = new Vector3(0 * tileOffset , 0, 0 * tileOffset) + gridOrigin;
+        Vector3 bossTilePosition = new Vector3((gridX - 1) * tileOffset, 0, (gridZ - 1) * tileOffset) + gridOrigin; 
+        if(startTilePosition != GeneratedTilesArray[0,0].position || bossTilePosition != GeneratedTilesArray[gridX-1, gridZ-1].position)
+        {
+            UnityEngine.Debug.Log("CreatePathInModel() ERROR: vector positions didn't match");
+            return;
+        }
 
-        List<PathNode> path;
+        //coordinates of elemenst in GeneratedTilesArray
+        int startCoordinatesI = 0;
+        int startCoordinatesJ = 0;
+        int targetCoordinatesI = gridX-1;
+        int targetCoordinatesj = gridZ-1;
 
-        path = pathFinder.FindPath(0, 0, 9, 9);
+        List<Vector3> path = PathFinder.FindPath(startCoordinatesI, startCoordinatesJ, targetCoordinatesI, targetCoordinatesj, GeneratedTilesArray);
+        if (path != null)
+        {
+            ShowListV3(path);
+            ChangeLavaToGrass(path);
+        }
 
-        if (path != null && path.Count > 0)
+        /*if (path != null && path.Count > 0)
         {
             Debug.Log("Here is the path: ");
 
@@ -358,19 +261,42 @@ public class PlayFieldGeneration : MonoBehaviour
             }
 
             Debug.Log("End of path.");
-        }
+        }*/
+
         else
         {
-            Debug.Log("Path is null or empty!!!");
+            UnityEngine.Debug.Log("CreatePathInModel() ERROR: Path is null or empty");
         }
 
-        Debug.Log("New Array: ");
-        ShowGeneratedTilesArray();
+        
+       /* Debug.Log("New Array: ");
+        ShowGeneratedTilesArray();*/
 
         SpawnTiles();
     }
 
+    private void ChangeLavaToGrass(List<Vector3> path)
+    {
+        int counter = 0;
 
+        foreach (Vector3 position in path)
+        {
+            int x = (int)(position.x / tileOffset); //hardcoded moment 10*1.1(tileOffset) = 11 => int 11 for 10th element (won`t work for grid > 10); / tileOffset fixes it
+            int z = (int)(position.z / tileOffset);
+            
+
+            if (GeneratedTilesArray[x, z].isGrass == false)
+            {
+                GeneratedTilesArray[x, z].isGrass = true;
+                GeneratedTilesArray[x, z].tileName = "Grass";
+                GeneratedTilesArray[x, z].costMultiplier = 1;
+                GeneratedTilesArray[x, z].tilePrefab = tiles[0];
+                counter++;
+            }
+        }
+        UnityEngine.Debug.Log("Transformed " + counter + " tiles.");
+
+    }
 
     void DebugLogArray()
     {
@@ -378,7 +304,7 @@ public class PlayFieldGeneration : MonoBehaviour
         {
             for (int z = 0; z < GeneratedTilesArray.GetLength(1); z++)
             {
-                Debug.Log("x: " + x + " z: " + z + " " + GeneratedTilesArray[x, z].name);
+                UnityEngine.Debug.Log("x: " + x + " z: " + z + " " + GeneratedTilesArray[x, z].name);
             }
         }
     }
@@ -412,7 +338,7 @@ public class PlayFieldGeneration : MonoBehaviour
                 {
                     if (GeneratedTilesArray[i, j].tilePrefab == null)
                     {
-                        Debug.Log("Tile prefab not found for Lava tile. Assigning default lava prefab.");
+                        UnityEngine.Debug.Log("Tile prefab not found for Lava tile. Assigning default lava prefab.");
                         GeneratedTilesArray[i, j].tilePrefab = tiles[0];
                     }
                     Vector3 spawnPosition = new Vector3(i * tileOffset, 0, j * tileOffset) + gridOrigin;
@@ -424,7 +350,7 @@ public class PlayFieldGeneration : MonoBehaviour
 
     void ChosingTile(Vector3 spawnPosition, Quaternion spawnRotation, int i, int j)
     {
-        int tileIndex = Random.Range(0, tiles.Length);
+        int tileIndex = UnityEngine.Random.Range(0, tiles.Length);
         GameObject randomTile = Instantiate(tiles[tileIndex], spawnPosition, spawnRotation);
 
         Tile tile = new Tile() { tilePrefab = randomTile };
@@ -443,6 +369,13 @@ public class PlayFieldGeneration : MonoBehaviour
 
         }
         GeneratedTilesArray.SetValue(tile, i, j);
+    }
+
+    void ClearMemory()
+    {
+        GeneratedTilesArray = null;
+        tiles = null;
+        GC.Collect();
     }
 
 }

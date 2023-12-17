@@ -14,14 +14,12 @@ public class PathNode
     public int hCost;
     public int fCost;
     public PathNode cameFromeNode;
-    public int costMultiplier;
     public bool isWalkable;
 
     public PathNode(int x, int z, int costMultiplier, bool isWalkable)
     {
         this.x = x;
         this.z = z;
-        this.costMultiplier = costMultiplier;
         this.isWalkable = isWalkable;
     }
     

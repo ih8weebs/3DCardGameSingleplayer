@@ -10,5 +10,5 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: c468052494a7b9043bfd9de4351b66d9, type: 3}
-  m_Name: ChangedTile
+  m_Name: GrassTile
   m_EditorClassIdentifier: 
